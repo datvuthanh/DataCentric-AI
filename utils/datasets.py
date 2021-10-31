@@ -104,7 +104,21 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix)
+                                      prefix=prefix)  
+        for i in range(len(dataset)):
+          img, labels, path, shape = dataset[i]
+          imgpath = path.replace('images','myimages')
+          txtpath = path.replace('images','mylabels').replace('jpg','txt')
+          img = img.permute(1, 2, 0)
+          img = img.cpu().detach().numpy()
+          labels = labels[:,1:].cpu().detach().numpy()
+          with open(txtpath, 'w') as f:
+            for label in labels:
+              label = tuple(label)
+              f.write(('%g ' * len(label)).rstrip() % label + '\n')
+          f.close()  
+          img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+          cv2.imwrite(imgpath,img)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -378,6 +392,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.path = path
         self.albumentations = Albumentations() if augment else None
 
+        # print(f"MOSAICC DAT VU {self.mosaic}")
+
         try:
             f = []  # image files
             for p in path if isinstance(path, list) else [path]:
@@ -597,6 +613,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
+
 
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes
 
