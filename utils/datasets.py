@@ -721,19 +721,19 @@ def load_mosaic(self, index):
         # if 2 in xyxy_labels[:,0]: # Wrong mask, we don't want crop half of wrong mask bounding boxes
         #   print(x1b, y1b, x2b, y2b)
         #   obj_cls, x1c, y1c, x2c, y2c = 
-        for ann in xyxy_labels:
-          obj_cls, x1c, y1c, x2c, y2c = ann
-          # if obj_cls == 1: # Wrong mask
-          #   # end point
-          if x2c > x1b and y2c > y1b and x2c < x2b and y2c < y2b:
-            if x1c < x1b and y1c < y1b:
-              # Change x1b,y1b
-              dx = int(x1b) - int(x1c)
-              dy = int(y1b) - int(y1c)
-              x1b = x1b - dx
-              y1b = y1b - dy
-              x2b = x2b - dx
-              y2b = y2b - dy
+#         for ann in xyxy_labels:
+#           obj_cls, x1c, y1c, x2c, y2c = ann
+#           # if obj_cls == 1: # Wrong mask
+#           #   # end point
+#           if x2c > x1b and y2c > y1b and x2c < x2b and y2c < y2b:
+#             if x1c < x1b and y1c < y1b:
+#               # Change x1b,y1b
+#               dx = int(x1b) - int(x1c)
+#               dy = int(y1b) - int(y1c)
+#               x1b = x1b - dx
+#               y1b = y1b - dy
+#               x2b = x2b - dx
+#               y2b = y2b - dy
 
 
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
