@@ -549,12 +549,12 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         mosaic = self.mosaic and random.random() < hyp['mosaic']
         if mosaic:
             # Load mosaic
-            img, labels = load_mosaic9(self, index)
+            img, labels = load_mosaic(self, index)
             shapes = None
 
             # MixUp augmentation
             if random.random() < hyp['mixup']:
-                img, labels = mixup(img, labels, *load_mosaic9(self, random.randint(0, self.n - 1)))
+                img, labels = mixup(img, labels, *load_mosaic(self, random.randint(0, self.n - 1)))
 
         else:
             # Load image
@@ -672,6 +672,20 @@ def load_image(self, i):
     else:
         return self.imgs[i], self.img_hw0[i], self.img_hw[i]  # im, hw_original, hw_resized
 
+def convert_coor(image, annotation):
+    annotations = np.array(annotation)
+    h,w = image.shape[:-1]
+    
+    transformed_annotations = np.copy(annotations)
+    transformed_annotations[:,[1,3]] = annotations[:,[1,3]] * w
+    transformed_annotations[:,[2,4]] = annotations[:,[2,4]] * h 
+    
+    transformed_annotations[:,1] = transformed_annotations[:,1] - (transformed_annotations[:,3] / 2)
+    transformed_annotations[:,2] = transformed_annotations[:,2] - (transformed_annotations[:,4] / 2)
+    transformed_annotations[:,3] = transformed_annotations[:,1] + transformed_annotations[:,3]
+    transformed_annotations[:,4] = transformed_annotations[:,2] + transformed_annotations[:,4]  
+
+    return transformed_annotations
 
 def load_mosaic(self, index):
     # loads images in a 4-mosaic
@@ -684,6 +698,10 @@ def load_mosaic(self, index):
     for i, index in enumerate(indices):
         # Load image
         img, _, (h, w) = load_image(self, index)
+        # Labels
+        labels, segments = self.labels[index].copy(), self.segments[index].copy()
+
+        xyxy_labels = convert_coor(img,labels)
 
         # place img in img4
         if i == 0:  # top left
@@ -700,12 +718,28 @@ def load_mosaic(self, index):
             x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
             x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
+        # if 2 in xyxy_labels[:,0]: # Wrong mask, we don't want crop half of wrong mask bounding boxes
+        #   print(x1b, y1b, x2b, y2b)
+        #   obj_cls, x1c, y1c, x2c, y2c = 
+        for ann in xyxy_labels:
+          obj_cls, x1c, y1c, x2c, y2c = ann
+          # if obj_cls == 1: # Wrong mask
+          #   # end point
+          if x2c > x1b and y2c > y1b and x2c < x2b and y2c < y2b:
+            if x1c < x1b and y1c < y1b:
+              # Change x1b,y1b
+              dx = int(x1b) - int(x1c)
+              dy = int(y1b) - int(y1c)
+              x1b = x1b - dx
+              y1b = y1b - dy
+              x2b = x2b - dx
+              y2b = y2b - dy
+
+
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
         padw = x1a - x1b
         padh = y1a - y1b
 
-        # Labels
-        labels, segments = self.labels[index].copy(), self.segments[index].copy()
         if labels.size:
             labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
             segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
@@ -741,6 +775,8 @@ def load_mosaic9(self, index):
     for i, index in enumerate(indices):
         # Load image
         img, _, (h, w) = load_image(self, index)
+        labels, segments = self.labels[index].copy(), self.segments[index].copy()
+        xyxy_labels = convert_coor(img,labels)
 
         # place img in img9
         if i == 0:  # center
@@ -768,7 +804,6 @@ def load_mosaic9(self, index):
         x1, y1, x2, y2 = [max(x, 0) for x in c]  # allocate coords
 
         # Labels
-        labels, segments = self.labels[index].copy(), self.segments[index].copy()
         if labels.size:
             labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padx, pady)  # normalized xywh to pixel xyxy format
             segments = [xyn2xy(x, w, h, padx, pady) for x in segments]
