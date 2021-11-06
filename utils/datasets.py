@@ -105,20 +105,20 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
                                       pad=pad,
                                       image_weights=image_weights,
                                       prefix=prefix)  
-        for i in range(len(dataset)):
-          img, labels, path, shape = dataset[i]
-          imgpath = path.replace('images','myimages')
-          txtpath = path.replace('images','mylabels').replace('jpg','txt')
-          img = img.permute(1, 2, 0)
-          img = img.cpu().detach().numpy()
-          labels = labels[:,1:].cpu().detach().numpy()
-          with open(txtpath, 'w') as f:
-            for label in labels:
-              label = tuple(label)
-              f.write(('%g ' * len(label)).rstrip() % label + '\n')
-          f.close()  
-          img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-          cv2.imwrite(imgpath,img)
+#         for i in range(len(dataset)):
+#           img, labels, path, shape = dataset[i]
+#           imgpath = path.replace('images','myimages')
+#           txtpath = path.replace('images','mylabels').replace('jpg','txt')
+#           img = img.permute(1, 2, 0)
+#           img = img.cpu().detach().numpy()
+#           labels = labels[:,1:].cpu().detach().numpy()
+#           with open(txtpath, 'w') as f:
+#             for label in labels:
+#               label = tuple(label)
+#               f.write(('%g ' * len(label)).rstrip() % label + '\n')
+#           f.close()  
+#           img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#           cv2.imwrite(imgpath,img)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, workers])  # number of workers
