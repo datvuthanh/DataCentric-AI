@@ -30,6 +30,8 @@ from utils.general import labels_to_class_weights, increment_path, labels_to_ima
     strip_optimizer, check_dataset, check_img_size, check_requirements, check_file,\
     check_yaml, check_suffix, one_cycle, colorstr, methods, set_logging
 
+import cv2
+import os
 
 FILE = Path(__file__).resolve()
 sys.path.append(FILE.parents[0].as_posix())
@@ -239,148 +241,170 @@ def train(hyp,
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
 
-    final_epoch = 0
     for epoch in range(start_epoch, epochs):
-        final_epoch = max(final_epoch, epoch)
-        model.train()
-        if args.image_weights:
-            class_weight = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / num_class
-            image_weight = labels_to_image_weights(dataset.labels, nc=num_class, class_weights=class_weight)
-            dataset.indices = random.choices(range(dataset.n), weights=image_weight, k=dataset.n)  # rand weighted idx
 
-        mean_losses = torch.zeros(3, device=device)
+        path1 = 'dataset/aug_' + str(epoch) + '/images'
+        path2 = 'dataset/aug_' + str(epoch) + '/labels'
+
+        if not os.path.exists(path1):
+          os.makedirs(path1)
+
+        if not os.path.exists(path2):
+          os.makedirs(path2)
 
         plot_bar = enumerate(train_loader)
-        LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
 
         plot_bar = tqdm(plot_bar, total=num_batches)
-        optimizer.zero_grad()
+
+        # img_batch, targets, paths, _ = train_loader
 
         for i, (img_batch, targets, paths, _) in plot_bar:
             num_inters = i + num_batches * epoch
+            # img = img_batch.
+            for img in img_batch:
+              # print(paths[0])
+              img = img.permute(1, 2, 0)
+              img = img.cpu().detach().numpy()
+              img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # Preprocess
-            img_batch = img_batch.to(device, non_blocking=True).float() / 255.0
+              paths_ = paths[0].replace('images/train','aug_' + str(epoch) + '/images')
+              cv2.imwrite(paths_,img)
 
-            # Warmup
-            if num_inters <= num_warmup_inters:
-                xi = [0, num_warmup_inters]  # x interp
+            txtpath = paths[0].replace('images/train', 'aug_' + str(epoch) + '/labels').replace('jpg','txt')
+            labels = targets[:,1:].cpu().detach().numpy()
+            with open(txtpath, 'w') as f:
+              for label in labels:
+                label = tuple(label)
+                f.write(('%g ' * len(label)).rstrip() % label + '\n')
+            f.close()  
 
-                accumulate = max(1, np.interp(num_inters, xi, [1, nbs / batch_size]).round())
-                for j, x in enumerate(optimizer.param_groups):
-                    x['lr'] = np.interp(num_inters, xi,
-                                        [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lr_lambda(epoch)])
-                    if 'momentum' in x:
-                        x['momentum'] = np.interp(num_inters, xi, [hyp['warmup_momentum'], hyp['momentum']])
 
-            # Multi-scale
-            if args.multi_scale:
-                size = random.randrange(img_size * 0.5, img_size * 1.5 + grid_size) // grid_size * grid_size
-                scale_factor = size / max(img_batch.shape[2:])
-                if scale_factor != 1:
-                    new_shape = [math.ceil(x * scale_factor / grid_size) * grid_size for x in img_batch.shape[2:]]
-                    img_batch = F.interpolate(img_batch, size=new_shape, mode='bilinear', align_corners=False)
+              # print(imimg_batchg.size())
+            
 
-            # Forward
-            with amp.autocast(enabled=cuda):
-                pred = model(img_batch)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device))
 
-                if args.quad:
-                    loss *= 4.
+    #         # Preprocess
+    #         img_batch = img_batch.to(device, non_blocking=True).float() / 255.0
 
-            # Backward
-            scaler.scale(loss).backward()
+    #         # Warmup
+    #         if num_inters <= num_warmup_inters:
+    #             xi = [0, num_warmup_inters]  # x interp
 
-            # Optimize
-            if num_inters - last_opt_step >= accumulate:
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
-                if ema:
-                    ema.update(model)
-                last_opt_step = num_inters
+    #             accumulate = max(1, np.interp(num_inters, xi, [1, nbs / batch_size]).round())
+    #             for j, x in enumerate(optimizer.param_groups):
+    #                 x['lr'] = np.interp(num_inters, xi,
+    #                                     [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lr_lambda(epoch)])
+    #                 if 'momentum' in x:
+    #                     x['momentum'] = np.interp(num_inters, xi, [hyp['warmup_momentum'], hyp['momentum']])
 
-            # Log
-            # Update mean losses
-            mean_losses = (mean_losses * i + loss_items) / (i + 1)
-            mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-            plot_bar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
-                f'{epoch}/{epochs - 1}', mem, *mean_losses, targets.shape[0], img_batch.shape[-1]))
-            callbacks.run('on_train_batch_end', num_inters, model, img_batch, targets, paths, plots, args.sync_bn)
+    #         # Multi-scale
+    #         if args.multi_scale:
+    #             size = random.randrange(img_size * 0.5, img_size * 1.5 + grid_size) // grid_size * grid_size
+    #             scale_factor = size / max(img_batch.shape[2:])
+    #             if scale_factor != 1:
+    #                 new_shape = [math.ceil(x * scale_factor / grid_size) * grid_size for x in img_batch.shape[2:]]
+    #                 img_batch = F.interpolate(img_batch, size=new_shape, mode='bilinear', align_corners=False)
 
-        # Scheduler
-        lr = [x['lr'] for x in optimizer.param_groups]
-        scheduler.step()
+    #         # Forward
+    #         with amp.autocast(enabled=cuda):
+    #             pred = model(img_batch)  # forward
+    #             loss, loss_items = compute_loss(pred, targets.to(device))
 
-        # mAP
-        callbacks.run('on_train_epoch_end', epoch=epoch)
-        ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
-        final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
+    #             if args.quad:
+    #                 loss *= 4.
 
-        if not no_val or final_epoch:  # Calculate mAP
-            results, maps, _ = val.run(data_dict,
-                                       batch_size=batch_size * 2,
-                                       img_size=img_size,
-                                       model=ema.ema,
-                                       dataloader=val_loader,
-                                       save_dir=save_dir,
-                                       verbose=num_class < 50 and final_epoch,
-                                       plots=plots and final_epoch,
-                                       callbacks=callbacks,
-                                       compute_loss=compute_loss)
+    #         # Backward
+    #         scaler.scale(loss).backward()
 
-        # Update best mAP
-        fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, wAP@.5, mAP@.5, mAP@.5-.95]
-        if fi > best_fitness:
-            best_fitness = fi
-        log_val = list(mean_losses) + list(results) + lr
-        callbacks.run('on_fit_epoch_end', log_val, epoch, best_fitness, fi)
+    #         # Optimize
+    #         if num_inters - last_opt_step >= accumulate:
+    #             scaler.step(optimizer)
+    #             scaler.update()
+    #             optimizer.zero_grad()
+    #             if ema:
+    #                 ema.update(model)
+    #             last_opt_step = num_inters
 
-        # Save model
-        if (not no_save) or (final_epoch and not evolve):  # if save
-            check_point = {'epoch': epoch,
-                           'best_fitness': best_fitness,
-                           'model': deepcopy(de_parallel(model)).half(),
-                           'ema': deepcopy(ema.ema).half(),
-                           'updates': ema.updates,
-                           'optimizer': optimizer.state_dict()}
+    #         # Log
+    #         # Update mean losses
+    #         mean_losses = (mean_losses * i + loss_items) / (i + 1)
+    #         mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
+    #         plot_bar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
+    #             f'{epoch}/{epochs - 1}', mem, *mean_losses, targets.shape[0], img_batch.shape[-1]))
+    #         callbacks.run('on_train_batch_end', num_inters, model, img_batch, targets, paths, plots, args.sync_bn)
 
-            # Save last, best and delete
-            torch.save(check_point, last)
-            if best_fitness == fi:
-                torch.save(check_point, best)
-            del check_point
-            callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
+    #     # Scheduler
+    #     lr = [x['lr'] for x in optimizer.param_groups]
+    #     scheduler.step()
 
-        # Stop Single-GPU
-        if stopper(epoch=epoch, fitness=fi):
-            break
+    #     # mAP
+    #     callbacks.run('on_train_epoch_end', epoch=epoch)
+    #     ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
+    #     final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
 
-    # End training
-    LOGGER.info('{} epochs completed in {:.3f} hours.'.format(
-        final_epoch - start_epoch + 1,
-        (time.time() - t0) / 3600
-    ))
+    #     if not no_val or final_epoch:  # Calculate mAP
+    #         results, maps, _ = val.run(data_dict,
+    #                                    batch_size=batch_size * 2,
+    #                                    img_size=img_size,
+    #                                    model=ema.ema,
+    #                                    dataloader=val_loader,
+    #                                    save_dir=save_dir,
+    #                                    verbose=num_class < 50 and final_epoch,
+    #                                    plots=plots and final_epoch,
+    #                                    callbacks=callbacks,
+    #                                    compute_loss=compute_loss)
 
-    if not evolve:
-        # Strip optimizers
-        for f in last, best:
-            if f.exists():
-                strip_optimizer(f)  # strip optimizers
-    callbacks.run('on_train_end', last, best, plots, final_epoch)
-    LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
+    #     # Update best mAP
+    #     fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, wAP@.5, mAP@.5, mAP@.5-.95]
+    #     if fi > best_fitness:
+    #         best_fitness = fi
+    #     log_val = list(mean_losses) + list(results) + lr
+    #     callbacks.run('on_fit_epoch_end', log_val, epoch, best_fitness, fi)
 
-    # Release gpu memory
-    torch.cuda.empty_cache()
+    #     # Save model
+    #     if (not no_save) or (final_epoch and not evolve):  # if save
+    #         check_point = {'epoch': epoch,
+    #                        'best_fitness': best_fitness,
+    #                        'model': deepcopy(de_parallel(model)).half(),
+    #                        'ema': deepcopy(ema.ema).half(),
+    #                        'updates': ema.updates,
+    #                        'optimizer': optimizer.state_dict()}
 
-    return results
+    #         # Save last, best and delete
+    #         torch.save(check_point, last)
+    #         if best_fitness == fi:
+    #             torch.save(check_point, best)
+    #         del check_point
+    #         callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
+
+    #     # Stop Single-GPU
+    #     if stopper(epoch=epoch, fitness=fi):
+    #         break
+
+    # # End training
+    # LOGGER.info('{} epochs completed in {:.3f} hours.'.format(
+    #     final_epoch - start_epoch + 1,
+    #     (time.time() - t0) / 3600
+    # ))
+
+    # if not evolve:
+    #     # Strip optimizers
+    #     for f in last, best:
+    #         if f.exists():
+    #             strip_optimizer(f)  # strip optimizers
+    # callbacks.run('on_train_end', last, best, plots, final_epoch)
+    # LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
+
+    # # Release gpu memory
+    # torch.cuda.empty_cache()
+
+    # return results
 
 
 def parser(known=False):
     args = argparse.ArgumentParser()
     args.add_argument('--data_cfg', type=str, default='config/data_cfg.yaml', help='dataset config file path')
-    args.add_argument('--batch-size', type=int, default=64, help='batch size')
+    args.add_argument('--batch-size', type=int, default=1, help='batch size')
     args.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
     args.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     args.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
