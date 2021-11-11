@@ -24,6 +24,8 @@ import yaml
 from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
+import os 
+import math
 
 from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
 from utils.general import check_dataset, check_requirements, check_yaml, clean_str, segments2boxes, \
@@ -672,13 +674,15 @@ def load_image(self, i):
     else:
         return self.imgs[i], self.img_hw0[i], self.img_hw[i]  # im, hw_original, hw_resized
 
-def convert_coor(image, annotation):
+def convert_coor(annotation,h0,w0,h1,w1):
     annotations = np.array(annotation)
-    h,w = image.shape[:-1]
+    r0 = h1 / h0
+    r1 = w1 / w0
+    h,w = h0,w0
     
     transformed_annotations = np.copy(annotations)
-    transformed_annotations[:,[1,3]] = annotations[:,[1,3]] * w
-    transformed_annotations[:,[2,4]] = annotations[:,[2,4]] * h 
+    transformed_annotations[:,[1,3]] = annotations[:,[1,3]] * w #* r1
+    transformed_annotations[:,[2,4]] = annotations[:,[2,4]] * h #* r0
     
     transformed_annotations[:,1] = transformed_annotations[:,1] - (transformed_annotations[:,3] / 2)
     transformed_annotations[:,2] = transformed_annotations[:,2] - (transformed_annotations[:,4] / 2)
@@ -696,12 +700,16 @@ def load_mosaic(self, index):
     indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
     random.shuffle(indices)
     for i, index in enumerate(indices):
+        #print(self.img_files[index])
+
+        # print(annotation_list)
+
         # Load image
-        img, _, (h, w) = load_image(self, index)
+        img, (h0,w0), (h, w) = load_image(self, index)
         # Labels
         labels, segments = self.labels[index].copy(), self.segments[index].copy()
 
-        xyxy_labels = convert_coor(img,labels)
+        xyxy_labels = convert_coor(labels,h0,w0,h,w)
 
         # place img in img4
         if i == 0:  # top left
@@ -717,54 +725,213 @@ def load_mosaic(self, index):
         elif i == 3:  # bottom right
             x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
             x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+        
+        height_ = y2b - y1b
+        width_ = x2b - x1b
 
-        #if 2 in xyxy_labels[:,0]: # Wrong mask, we don't want crop half of wrong mask bounding boxes
-        for ann in xyxy_labels:
-          obj_cls, x1c, y1c, x2c, y2c = ann
-          # if obj_cls == 2: # Wrong mask
-            # end point
-          if x2c > x1b and y2c > y1b and x2c < x2b and y2c < y2b:
-            if x1c < x1b and y1c < y1b:
-              # Change x1b,y1b
-              dx = int(x1b) - int(x1c)
-              dy = int(y1b) - int(y1c)
-              x1b = x1b - dx
-              y1b = y1b - dy
-              x2b = x2b - dx
-              y2b = y2b - dy
-            if x1c < x1b and y1c > y1b and y1c < y2b:
-              dx = int(x1b) - int(x1c)
-              x1b = x1b - dx
-              x2b = x2b - dx
-            if x1c < x1b and y1c > y2b:
-              dx = int(x1b) - int(x1c)
-              dy = int(y1c) - int(y2b)
-              x1b = x1b - dx
-              y1b = y1b + dy
-              x2b = x2b - dx
-              y2b = y2b + dy
-            if x1c > x1b and x1c < x2b and y1c < y1b:
-              dx = int(x1c) - int(x1b)
-              dy = int(y1b) - int(y1c)
-              y1b = y1b - dy 
-              y2b = y2b - dy
+        txtname = self.img_files[index].split('/')[-1].replace('jpg','txt')
+
+        path = '/content/person/' + txtname
+        # Open file txt
+
+        if os.path.isfile(path):
+          with open(path, "r") as file:
+            annotation_list = file.read().split("\n")[:-1]
+            annotation_list = [x.split(" ") for x in annotation_list]
+            annotation_list = [[float(y) for y in x ] for x in annotation_list]
+
+          xyxy_person = convert_coor(annotation_list,h0,w0,h,w)
+
+          person = random.choice(xyxy_person)
+          obj_cls, xmin_p, ymin_p, xmax_p, ymax_p = person
+
+          xmin_p, ymin_p, xmax_p, ymax_p = int(xmin_p), int(ymin_p), int(xmax_p), int(ymax_p)
+
+          xmax_p = min(img.shape[1],xmin_p + width_)
+          ymax_p = min(img.shape[0],ymin_p + height_)
+
+          if xmax_p - xmin_p != (x2b - x1b):
+            xmin_p = xmax_p - (x2b - x1b)
+          if ymax_p - ymin_p != (y2b - y1b):
+            ymin_p = ymax_p - (y2b - y1b)
+
+        # x1b, y1b, x2b, y2b = xmin_p, ymin_p, xmax_p, ymax_p
+
+        # print("A",x1b, y1b, x2b, y2b)
+
+        # xc_p = (xmax_p - xmin_p) / 2
+        # yc_p = (ymax_p - ymin_p) / 2
+
+
+        # x1b, y1b, x2b, y2b = max(0, xc_p - (width_ / 2)), max(0, yc_p - (height_ / 2)), min(w, xc_p + (width_ / 2)), min(h, yc_p + (height_ / 2))
+        
+        # x1b, y1b, x2b, y2b = int(x1b), int(y1b), int(x2b), int(y2b)
+
+        # x2a = x1a + (x2b - x1b)
+        # y2a = y1a + (y2b - y1b)
+
+
+
+        # print("DD: ",x1b, y1b, x2b, y2b)
+
+        # print("Before", x1a, y1a, x2a , y2a)
+
+        # x1a, y1a, x2a , y2a = x1a + (x1a - x1b), y1a + (y1a - y1b), x2a + (x2a - x2b), y2a + (y2a - y2b)
+
+        # print("Update, ", x1a, y1a, x2a , y2a)
+
+
+
+        
+        # Check labels exists in img
+        # label_p = list()
+        # flag = False
+        # for label in xyxy_person:
+        #   obj_cls, xmin_p, ymin_p, xmax_p, ymax_p = label
+        #   if (xmin_p > x1b and ymin_p > y1b and xmin_p < x2b and ymin_p < y2b) or (xmax_p > x1b and ymax_p > y1b and xmax_p < x2b and ymax_p < y2b):
+        #     flag = True
+        #     label_p.append(label)
+        #   else:
+        #     flag = False
+
+        # height_ = y2b - y1b
+        # width_ = x2b - x1b
+
+        # print("Height width", height_,width_)
+        # print("Orginal ", y2a-y1a,x2a-x1a)
+
+        # # if flag:
+        # #   for label in label_p:
+        # #     obj_cls, xmin_p, ymin_p, xmax_p, ymax_p = label
+        # #     height_p = xmax_p - xmin_p
+        # #     width_p = ymax_p - ymin_p
+        # #     if height_p < height_ and width_p < wdith_:
+
+        # print("FLAG",flag)
+        # if flag:
+        #   count = 0
+        #   pad_hp_o = 0
+        #   pad_wp_o = 0 
+        #   person_p = None
+        #   for person in xyxy_person:
+        #     person = random.choice(xyxy_person)
+
+        #     obj_cls, xmin_, ymin_, xmax_, ymax_ = person
+
+        #     height_p = int((ymax_) - (ymin_))
+        #     width_p = int((xmax_) - (xmin_))
+
+        #     pad_hp = height_ - height_p
+        #     pad_wp = width_ - width_p
+
+        #     if count == 0:
+        #       pad_hp_o = pad_hp
+        #       pad_wp_o = pad_wp
+        #       person_p = person
+
+        #     else:
+        #       if pad_hp < pad_hp_o and pad_wp < pad_wp_o:
+        #         pad_hp_o = pad_hp
+        #         pad_wp_o = pad_wp
+        #         person_p = person
+
+        #     count += 1
+
+        #   obj_cls, xmin_pp, ymin_pp, xmax_pp, ymax_pp = person_p
+        #   xmin_pp, ymin_pp, xmax_pp, ymax_pp = int(xmin_pp), int(ymin_pp), int(xmax_pp), int(ymax_pp)
+        #   half_pad_hp_o = math.ceil(pad_hp_o / 2)
+        #   half_pad_wp_o = math.ceil(pad_wp_o / 2)
+
+        #   if xmin_pp - half_pad_wp_o > 0 and ymin_pp - half_pad_hp_o > 0 and xmax_pp + half_pad_wp_o < img.shape[1] and ymax_pp + half_pad_hp_o < img.shape[0]:
+        #     x1b, y1b, x2b, y2b = xmin_pp - half_pad_wp_o, ymin_pp - half_pad_hp_o, xmax_pp + half_pad_wp_o, ymax_pp + half_pad_hp_o
+
+        #   # print(x1b, y1b, x2b, y2b)
+        #   # if x1b < 0:
+        #   #   x1b = xmin_pp
+        #   #   x2b = xmax_pp + pad_wp_o
+        #   #   if x2b > img.shape[1]:
+        #   #     x2b = img.shape[1]
+        #   # if x2b < 0:
+        #   #   x1b = xmin_pp - pad_wp_o
+        #   #   x2b = xmax_pp
+        #   # if y1b < 0:
+        #   #   y1b = ymin_pp
+        #   #   y2b = ymax_pp + pad_hp_o
+        #   #   if y2b > img.shape[0]:
+        #   #     y2b = img.shape[0]
+        #   # if y2b < 0:
+        #   #   y1b = ymin_pp - pad_hp_o
+        #   #   y2b = ymax_pp
+        #   # if y2b > img.shape[0]:
+        #   #   y2b = ymax_pp
+        #   #   y1b = ymin_pp - pad_hp_o
+        #   #   if y1b < 0:
+        #   #     y1b = 0
+        #   # if x2b > img.shape[1]:
+        #   #   x2b = xmax_pp
+        #   #   x1b = xmin_pp - pad_wp_o
+        #   #   if x1b < 0:
+        #   #     x1b = 0
+
+        #   # 
+        #   x1b, y1b, x2b, y2b = int(x1b), int(y1b), int(x2b), int(y2b)
+
+        
+        #print(label_p)
+
+        # if 2 in xyxy_labels[:,0]: # Wrong mask, we don't want crop half of wrong mask bounding boxes
+        # for ann in xyxy_labels:
+        #   obj_cls, x1c, y1c, x2c, y2c = ann
+        #   # if obj_cls == 2: # Wrong mask
+        #     # end point
+        #   if x2c > x1b and y2c > y1b and x2c < x2b and y2c < y2b:
+        #     if x1c < x1b and y1c < y1b:
+        #       # Change x1b,y1b
+        #       dx = int(x1b) - int(x1c)
+        #       dy = int(y1b) - int(y1c)
+        #       x1b = x1b - dx
+        #       y1b = y1b - dy
+        #       x2b = x2b - dx
+        #       y2b = y2b - dy
+        #     if x1c < x1b and y1c > y1b and y1c < y2b:
+        #       dx = int(x1b) - int(x1c)
+        #       x1b = x1b - dx
+        #       x2b = x2b - dx
+        #     if x1c < x1b and y1c > y2b:
+        #       dx = int(x1b) - int(x1c)
+        #       dy = int(y1c) - int(y2b)
+        #       x1b = x1b - dx
+        #       y1b = y1b + dy
+        #       x2b = x2b - dx
+        #       y2b = y2b + dy
+        #     if x1c > x1b and x1c < x2b and y1c < y1b:
+        #       dx = int(x1c) - int(x1b)
+        #       dy = int(y1b) - int(y1c)
+        #       y1b = y1b - dy 
+        #       y2b = y2b - dy
             
-            # Start point
-            if x1c > x1b and x1c < x2b and y1c > y1b and y1c < y2b:
-              if x2c > x2b and y2c > y1b and y2c < y2b:
-                # Dich chuyen x
-                dx = int(x2c) - int(x2b)
-                x1b = x1b + dx
-                x2b = x2b + dx
-              if x2c > x2b and y2c > y2b:
-                dx = int(x2c) - int(x2b)
-                dy = int(y2c) - int(y2b)
-                x1b = x1b + dx
-                y1b = y1b + dy
-                x2b = x2b + dx
-                y2b = y2b + dy
+        #     # Start point
+        #     if x1c > x1b and x1c < x2b and y1c > y1b and y1c < y2b:
+        #       if x2c > x2b and y2c > y1b and y2c < y2b:
+        #         # Dich chuyen x
+        #         dx = int(x2c) - int(x2b)
+        #         x1b = x1b + dx
+        #         x2b = x2b + dx
+        #       if x2c > x2b and y2c > y2b:
+        #         dx = int(x2c) - int(x2b)
+        #         dy = int(y2c) - int(y2b)
+        #         x1b = x1b + dx
+        #         y1b = y1b + dy
+        #         x2b = x2b + dx
+        #         y2b = y2b + dy
                             
+        # cutimg = img[y1b:y2b, x1b:x2b]
 
+        # print(img.shape,cutimg.shape)
+
+        # if cutimg.shape != (y2a-y1a,x2a-x1a,3):
+        #   print(cutimg.shape, (y2a-y1a,x2a-x1a,3))
+        #   cutimg = cv2.resize(cutimg,(x2a-x1a,y2a-y1a),cv2.INTER_AREA)
 
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
 
