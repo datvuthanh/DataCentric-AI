@@ -731,7 +731,7 @@ def load_mosaic(self, index):
 
         txtname = self.img_files[index].split('/')[-1].replace('jpg','txt')
 
-        path = '/content/person/' + txtname
+        path = './person/' + txtname
         # Open file txt
 
         if os.path.isfile(path):
