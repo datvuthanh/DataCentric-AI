@@ -735,7 +735,6 @@ def load_mosaic(self, index):
         # Open file txt
 
         if os.path.isfile(path):
-          print("YES")
           with open(path, "r") as file:
             annotation_list = file.read().split("\n")[:-1]
             annotation_list = [x.split(" ") for x in annotation_list]
