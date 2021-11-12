@@ -141,9 +141,9 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
     # Rotation and Scale
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
-    a += random.choice([-180, -90, 0, 90, 45, -45, -30, 30, 60, -60])  # add 90deg rotations to small rotations
+#     a += random.choice([-180, -90, 0, 90, 45, -45, -30, 30, 60, -60])  # add 90deg rotations to small rotations
     s = random.uniform(1 - scale, 1 + scale)
-    s = 2 ** random.uniform(-scale, scale)
+#     s = 2 ** random.uniform(-scale, scale)
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
     # Shear
