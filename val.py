@@ -15,7 +15,7 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.torch_utils import select_device, time_sync
 from utils.general import check_dataset, check_img_size, check_suffix, check_yaml, box_iou,\
     non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
-
+import os
 
 FILE = Path(__file__).resolve()
 sys.path.append(FILE.parents[0].as_posix())
@@ -87,6 +87,10 @@ def run(data,
         compute_loss=None,
         ):
 
+    # path = save_dir / 'labels'
+    # if not os.path.exists(path):
+    #   os.makedirs(path)    
+    # save_txt = True
     # Initialize/load model and set device
     is_loaded_model = model is not None
     grid_size = None
@@ -99,6 +103,10 @@ def run(data,
         # Directories
         save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)
         (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)
+
+
+
+
 
         # Load model
         check_suffix(weights, '.pt')
@@ -206,6 +214,7 @@ def run(data,
 
             # Save/log
             if save_txt:
+
                 save_one_txt(normed_pred, save_conf, shape, file=save_dir / 'labels' / (path.stem + '.txt'))
             callbacks.run('on_val_image_end', pred, normed_pred, path, names, img[si])
 
@@ -234,6 +243,7 @@ def run(data,
     # Print results
     print_format = '%20s' + '%11i' * 3 + '%11.3g' * 5  # print format
     print(print_format % ('all', seen, nt.sum(), sum(boxes_per_class), mp, mr, wap50, map50, map))
+    print(f"DAT ADD: \t {ap50[0]} \t {ap50[1]} \t {ap50[2]}")
 
     # Print results per class
     if (verbose or (num_class < 50 and not is_loaded_model)) and num_class > 1 and len(stats):
