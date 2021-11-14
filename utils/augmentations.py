@@ -28,7 +28,7 @@ class Albumentations:
                 A.ToGray(p=0.01),
                 A.RandomBrightnessContrast(p=0.2),
                 A.RandomGamma(p=0.2)
-                                        ],
+                A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30, p=0.3)],
                 bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
 
             logging.info(colorstr('albumentations: ') + ', '.join(f'{x}' for x in self.transform.transforms if x.p))
