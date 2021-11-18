@@ -21,12 +21,12 @@ hsv_h: 0.0138
 hsv_s: 0.664
 hsv_v: 0.464
 degrees: 0.373
-translate: 0.245
-scale: 0.892
-shear: 0.602
+translate: 0.0
+scale: 0.0
+shear: 0.0
 perspective: 0.0
 flipud: 0.00856
 fliplr: 0.5
 mosaic: 1.0
-mixup: 0.243
+mixup: 0.32
 copy_paste: 0.0
