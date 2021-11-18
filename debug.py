@@ -243,8 +243,8 @@ def train(hyp,
 
     for epoch in range(start_epoch, epochs):
 
-        path1 = 'dataset/aug_' + str(epoch) + '/images'
-        path2 = 'dataset/aug_' + str(epoch) + '/labels'
+        path1 = 'dataset/aug_MM' + str(epoch) + '/images'
+        path2 = 'dataset/aug_MM' + str(epoch) + '/labels'
 
         if not os.path.exists(path1):
           os.makedirs(path1)
@@ -267,10 +267,17 @@ def train(hyp,
               img = img.cpu().detach().numpy()
               img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-              paths_ = paths[0].replace('images/train','aug_' + str(epoch) + '/images')
-              cv2.imwrite(paths_,img)
+              filename = paths[0].split('/')[-1]
 
-            txtpath = paths[0].replace('images/train', 'aug_' + str(epoch) + '/labels').replace('jpg','txt')
+              outputname = 'MM' + str(epoch) + '_' + filename
+
+              paths_ = paths[0].replace('images/train','aug_MM' + str(epoch) + '/images')
+              paths_ = paths_.replace(filename,outputname)
+
+              cv2.imwrite(paths_,img,[cv2.IMWRITE_JPEG_QUALITY, 100])
+
+            #txtpath = paths[0].replace('images/train', 'aug_' + str(epoch) + '/labels').replace('jpg','txt')
+            txtpath = paths_.replace('images','labels').replace('jpg','txt')
             labels = targets[:,1:].cpu().detach().numpy()
             with open(txtpath, 'w') as f:
               for label in labels:
@@ -278,127 +285,6 @@ def train(hyp,
                 f.write(('%g ' * len(label)).rstrip() % label + '\n')
             f.close()  
 
-
-              # print(imimg_batchg.size())
-            
-
-
-    #         # Preprocess
-    #         img_batch = img_batch.to(device, non_blocking=True).float() / 255.0
-
-    #         # Warmup
-    #         if num_inters <= num_warmup_inters:
-    #             xi = [0, num_warmup_inters]  # x interp
-
-    #             accumulate = max(1, np.interp(num_inters, xi, [1, nbs / batch_size]).round())
-    #             for j, x in enumerate(optimizer.param_groups):
-    #                 x['lr'] = np.interp(num_inters, xi,
-    #                                     [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lr_lambda(epoch)])
-    #                 if 'momentum' in x:
-    #                     x['momentum'] = np.interp(num_inters, xi, [hyp['warmup_momentum'], hyp['momentum']])
-
-    #         # Multi-scale
-    #         if args.multi_scale:
-    #             size = random.randrange(img_size * 0.5, img_size * 1.5 + grid_size) // grid_size * grid_size
-    #             scale_factor = size / max(img_batch.shape[2:])
-    #             if scale_factor != 1:
-    #                 new_shape = [math.ceil(x * scale_factor / grid_size) * grid_size for x in img_batch.shape[2:]]
-    #                 img_batch = F.interpolate(img_batch, size=new_shape, mode='bilinear', align_corners=False)
-
-    #         # Forward
-    #         with amp.autocast(enabled=cuda):
-    #             pred = model(img_batch)  # forward
-    #             loss, loss_items = compute_loss(pred, targets.to(device))
-
-    #             if args.quad:
-    #                 loss *= 4.
-
-    #         # Backward
-    #         scaler.scale(loss).backward()
-
-    #         # Optimize
-    #         if num_inters - last_opt_step >= accumulate:
-    #             scaler.step(optimizer)
-    #             scaler.update()
-    #             optimizer.zero_grad()
-    #             if ema:
-    #                 ema.update(model)
-    #             last_opt_step = num_inters
-
-    #         # Log
-    #         # Update mean losses
-    #         mean_losses = (mean_losses * i + loss_items) / (i + 1)
-    #         mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-    #         plot_bar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
-    #             f'{epoch}/{epochs - 1}', mem, *mean_losses, targets.shape[0], img_batch.shape[-1]))
-    #         callbacks.run('on_train_batch_end', num_inters, model, img_batch, targets, paths, plots, args.sync_bn)
-
-    #     # Scheduler
-    #     lr = [x['lr'] for x in optimizer.param_groups]
-    #     scheduler.step()
-
-    #     # mAP
-    #     callbacks.run('on_train_epoch_end', epoch=epoch)
-    #     ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
-    #     final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
-
-    #     if not no_val or final_epoch:  # Calculate mAP
-    #         results, maps, _ = val.run(data_dict,
-    #                                    batch_size=batch_size * 2,
-    #                                    img_size=img_size,
-    #                                    model=ema.ema,
-    #                                    dataloader=val_loader,
-    #                                    save_dir=save_dir,
-    #                                    verbose=num_class < 50 and final_epoch,
-    #                                    plots=plots and final_epoch,
-    #                                    callbacks=callbacks,
-    #                                    compute_loss=compute_loss)
-
-    #     # Update best mAP
-    #     fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, wAP@.5, mAP@.5, mAP@.5-.95]
-    #     if fi > best_fitness:
-    #         best_fitness = fi
-    #     log_val = list(mean_losses) + list(results) + lr
-    #     callbacks.run('on_fit_epoch_end', log_val, epoch, best_fitness, fi)
-
-    #     # Save model
-    #     if (not no_save) or (final_epoch and not evolve):  # if save
-    #         check_point = {'epoch': epoch,
-    #                        'best_fitness': best_fitness,
-    #                        'model': deepcopy(de_parallel(model)).half(),
-    #                        'ema': deepcopy(ema.ema).half(),
-    #                        'updates': ema.updates,
-    #                        'optimizer': optimizer.state_dict()}
-
-    #         # Save last, best and delete
-    #         torch.save(check_point, last)
-    #         if best_fitness == fi:
-    #             torch.save(check_point, best)
-    #         del check_point
-    #         callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
-
-    #     # Stop Single-GPU
-    #     if stopper(epoch=epoch, fitness=fi):
-    #         break
-
-    # # End training
-    # LOGGER.info('{} epochs completed in {:.3f} hours.'.format(
-    #     final_epoch - start_epoch + 1,
-    #     (time.time() - t0) / 3600
-    # ))
-
-    # if not evolve:
-    #     # Strip optimizers
-    #     for f in last, best:
-    #         if f.exists():
-    #             strip_optimizer(f)  # strip optimizers
-    # callbacks.run('on_train_end', last, best, plots, final_epoch)
-    # LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
-
-    # # Release gpu memory
-    # torch.cuda.empty_cache()
-
-    # return results
 
 
 def parser(known=False):
