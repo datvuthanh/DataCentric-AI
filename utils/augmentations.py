@@ -26,9 +26,9 @@ class Albumentations:
                 A.Blur(p=0.1),
                 A.MedianBlur(p=0.1),
                 A.ToGray(p=0.01),
-                A.RandomBrightnessContrast(p=0.2),
-                A.RandomGamma(p=0.2)
-                A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30, p=0.3)],
+                A.RandomBrightnessContrast(p=0.1),
+                A.RandomGamma(p=0.1)],
+                # A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30, p=0.3)],
                 bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
 
             logging.info(colorstr('albumentations: ') + ', '.join(f'{x}' for x in self.transform.transforms if x.p))
@@ -142,9 +142,9 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
     # Rotation and Scale
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
-    a += random.choice([-180, -90, 0, 90, 45, -45, -30, 30, 60, -60, -15, 15, -75, 75])  # add 90deg rotations to small rotations
+    # a += random.choice([-180, -90, 0, 90, 45, -45, -30, 30, 60, -60, -15, 15, -75, 75])  # add 90deg rotations to small rotations
     s = random.uniform(1 - scale, 1 + scale)
-    s = 2 ** random.uniform(-scale, scale)
+    # s = 2 ** random.uniform(-scale, scale)
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
     # Shear
@@ -203,7 +203,7 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
             new[:, [1, 3]] = new[:, [1, 3]].clip(0, height)
 
         # filter candidates
-        i = box_candidates(box1=targets[:, 1:5].T * s, box2=new.T, area_thr=0.01 if use_segments else 0.7)
+        i = box_candidates(box1=targets[:, 1:5].T * s, box2=new.T, area_thr=0.01 if use_segments else 0.6)
         targets = targets[i]
         targets[:, 1:5] = new[i]
 
@@ -274,4 +274,4 @@ def box_candidates(box1, box2, wh_thr=10, ar_thr=20, area_thr=0.1, eps=1e-16):  
     w1, h1 = box1[2] - box1[0], box1[3] - box1[1]
     w2, h2 = box2[2] - box2[0], box2[3] - box2[1]
     ar = np.maximum(w2 / (h2 + eps), h2 / (w2 + eps))  # aspect ratio
-    return (w2 > wh_thr) & (h2 > wh_thr) & (w2 * h2 / (w1 * h1 + eps) > area_thr) & (ar < ar_thr)  # candidates
+    return (w2 > wh_thr) & (h2 > wh_thr) & (w2 * h2 / (w1 * h1 + eps) > area_thr) & (ar < ar_thr)  # candidate
