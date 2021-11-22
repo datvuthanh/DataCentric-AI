@@ -274,7 +274,7 @@ def train(hyp,
               paths_ = paths[0].replace('images/train','aug_MM' + str(epoch) + '/images')
               paths_ = paths_.replace(filename,outputname)
 
-              cv2.imwrite(paths_,img,[cv2.IMWRITE_JPEG_QUALITY, 100])
+              cv2.imwrite(paths_,img)
 
             #txtpath = paths[0].replace('images/train', 'aug_' + str(epoch) + '/labels').replace('jpg','txt')
             txtpath = paths_.replace('images','labels').replace('jpg','txt')
